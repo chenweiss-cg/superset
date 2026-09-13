@@ -108,7 +108,7 @@ def histogram(
         histogram_df.columns = bin_edges_str
 
     if normalize:
-        histogram_df = histogram_df / histogram_df.values.sum()
+        histogram_df = histogram_df / len(df)
 
     # reorder the columns to have the groupby columns first
     histogram_df = histogram_df.reset_index().loc[:, groupby + bin_edges_str]
