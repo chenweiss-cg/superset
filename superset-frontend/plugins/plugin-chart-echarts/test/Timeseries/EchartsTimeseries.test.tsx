@@ -448,6 +448,45 @@ test('dragging to the already-active baseline does not re-issue a redundant reba
   expect(rebaseCall).toBeUndefined();
 });
 
+test('dragging on a category axis resolves the ordinal index to the displayed category', () => {
+  const categories = ['z', 'a', 'm'];
+  // A category axis reports positions as ordinal indices rather than
+  // labels, both to and from pixels.
+  mockChart.convertToPixel.mockImplementation(
+    (_finder: unknown, x: string) => categories.indexOf(x) * PX_PER_UNIT,
+  );
+  mockChart.convertFromPixel.mockImplementation(
+    (_finder: unknown, px: number) => Math.round(px / PX_PER_UNIT),
+  );
+  renderTimeseries({
+    echartOptions: {
+      series: [
+        {
+          data: [
+            ['z', 0],
+            ['a', 0.5],
+            ['m', 1],
+          ],
+        },
+      ],
+    } as any,
+  });
+  const graphic = getBaselineGraphic();
+  mockChart.setOption.mockClear();
+  graphic.ondrag.call({ x: 1 * PX_PER_UNIT - 4, y: 0 });
+
+  const rebaseCall = mockChart.setOption.mock.calls.find(([option]) =>
+    Array.isArray(option?.series),
+  );
+  expect(rebaseCall).toBeDefined();
+  const [{ series }] = rebaseCall!;
+  expect(series[0].data).toEqual([
+    ['z', 1 / 1.5 - 1],
+    ['a', 0],
+    ['m', 2 / 1.5 - 1],
+  ]);
+});
+
 test('does not draw a baseline when the series has no plottable points', () => {
   renderTimeseries({
     echartOptions: { series: [{ data: [] }] } as any,
