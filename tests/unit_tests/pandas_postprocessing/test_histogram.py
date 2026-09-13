@@ -104,22 +104,33 @@ def test_histogram_with_groupby_and_cumulative_and_normalize():
         "8.2 - 10.0",
     ]
     assert result.values.tolist() == [
-        [
-            "A",
-            0.06666666666666667,
-            0.06666666666666667,
-            0.13333333333333333,
-            0.13333333333333333,
-            0.2,
-        ],
-        [
-            "B",
-            0.0,
-            0.06666666666666667,
-            0.06666666666666667,
-            0.13333333333333333,
-            0.13333333333333333,
-        ],
+        ["A", 0.2, 0.2, 0.4, 0.4, 0.6],
+        ["B", 0.0, 0.2, 0.2, 0.4, 0.4],
+    ]
+
+
+def test_histogram_cumulative_and_normalize_uses_observation_count():
+    """
+    Normalizing a cumulative histogram must divide by the number of
+    observations, not by the sum of the cumulative bin counts, so the final
+    cumulative value(s) sum to 1.
+    """
+    frame = DataFrame({"value": [1, 2, 3, 4]})
+    result = histogram(frame, "value", [], bins=2, normalize=True, cumulative=True)
+    assert result.values.tolist() == [[0.5, 1.0]]
+
+    grouped = DataFrame({"value": [1, 2, 3, 4], "group": ["A", "A", "B", "B"]})
+    result = histogram(
+        grouped, "value", ["group"], bins=2, normalize=True, cumulative=True
+    )
+    assert result.values.tolist() == [["A", 0.5, 0.5], ["B", 0.0, 0.5]]
+
+    # non-cumulative normalization and non-normalized cumulation are unchanged
+    assert histogram(frame, "value", [], bins=2, normalize=True).values.tolist() == [
+        [0.5, 0.5]
+    ]
+    assert histogram(frame, "value", [], bins=2, cumulative=True).values.tolist() == [
+        [2, 4]
     ]
 
 
