@@ -67,18 +67,28 @@ export type SeriesDataPoint = [number | string, number | null];
  * percent-change rebasing is composable, v' = (1 + v) / (1 + vk) - 1
  * derives the new view directly from the currently displayed values,
  * where vk is the series value at the nearest x at or before the new
- * baseline (falling back to the first non-null point).
+ * baseline (falling back to the first non-null point). Numeric x values
+ * compare by magnitude; category x values compare by their position in
+ * the series, since their labels carry no meaningful order.
  */
 export function rebaseSeriesData(
   data: SeriesDataPoint[],
   baselineX: number | string,
 ): SeriesDataPoint[] {
+  const baselineIndex =
+    typeof baselineX === 'string'
+      ? data.findIndex(([x]) => x === baselineX)
+      : -1;
+  const isAtOrBeforeBaseline = (x: number | string, index: number) =>
+    typeof baselineX === 'string'
+      ? baselineIndex !== -1 && index <= baselineIndex
+      : typeof x === 'number' && x <= baselineX;
   // the non-null point with the largest x at or before the baseline,
   // falling back to the first non-null point
   let baselineValue: number | null = null;
-  data.forEach(([x, y]) => {
+  data.forEach(([x, y], index) => {
     if (y == null) return;
-    if (x <= baselineX || baselineValue === null) {
+    if (isAtOrBeforeBaseline(x, index) || baselineValue === null) {
       baselineValue = y;
     }
   });
@@ -92,10 +102,11 @@ export function rebaseSeriesData(
 /**
  * Snaps a dragged x position to the nearest available data x. Time/value
  * axes report a continuous pixel-derived number, so the nearest point is
- * found by numeric distance. Category axes report the exact category
- * value already snapped by ECharts; there's no numeric scale to measure
- * distance against, so it's only validated against the known x values
- * (falling back to the first one if the pixel landed outside the axis).
+ * found by numeric distance. Category axes report either the category
+ * label or its ordinal index (ECharts' `convertFromPixel` returns the
+ * index), so a label is validated against the known x values and an index
+ * is resolved positionally, clamped to the axis' range. Labels that don't
+ * match any known x fall back to the first one.
  */
 export function snapToNearestX(
   xs: (number | string)[],
@@ -106,7 +117,11 @@ export function snapToNearestX(
     return xs.includes(target) ? target : xs[0];
   }
   const numericXs = xs.filter((x): x is number => typeof x === 'number');
-  if (numericXs.length === 0) return undefined;
+  if (numericXs.length === 0) {
+    if (Number.isNaN(target)) return undefined;
+    const index = Math.min(xs.length - 1, Math.max(0, Math.round(target)));
+    return xs[index];
+  }
   return numericXs.reduce((best, x) =>
     Math.abs(x - target) < Math.abs(best - target) ? x : best,
   );

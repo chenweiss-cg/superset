@@ -20,6 +20,7 @@ import {
   rebaseToPercentChange,
   rebaseSeriesData,
   snapToNearestX,
+  SeriesDataPoint,
 } from '../../src/Timeseries/percentChange';
 
 test('rebases each column to percent change from its first value', () => {
@@ -95,4 +96,37 @@ test('validates a category-axis x instead of coercing it to a number', () => {
   expect(snapToNearestX(['a', 'b', 'c'], 'b')).toBe('b');
   // a pixel that landed outside the axis falls back to the first category
   expect(snapToNearestX(['a', 'b', 'c'], 'unknown')).toBe('a');
+});
+
+test('resolves a category-axis ordinal index to its displayed category', () => {
+  // ECharts' convertFromPixel reports a category axis position as an index
+  const categories = ['z', 'a', 'm'];
+  expect(snapToNearestX(categories, 0)).toBe('z');
+  expect(snapToNearestX(categories, 1)).toBe('a');
+  expect(snapToNearestX(categories, 2)).toBe('m');
+  // a pixel past either end clamps to the nearest edge category
+  expect(snapToNearestX(categories, -1)).toBe('z');
+  expect(snapToNearestX(categories, 7)).toBe('m');
+  expect(snapToNearestX(categories, NaN)).toBeUndefined();
+});
+
+test('rebases category series by displayed position, not label order', () => {
+  const displayed: SeriesDataPoint[] = [
+    ['z', 0],
+    ['a', 0.5],
+    ['m', 1],
+  ];
+  // the first displayed category is already the baseline
+  expect(rebaseSeriesData(displayed, 'z')).toEqual(displayed);
+  const reindexed = rebaseSeriesData(displayed, 'a');
+  expect(reindexed[0][1]).toBeCloseTo(1 / 1.5 - 1);
+  expect(reindexed[1][1]).toBeCloseTo(0);
+  expect(reindexed[2][1]).toBeCloseTo(2 / 1.5 - 1);
+  // a null at the baseline category falls back to the preceding point
+  const withNull: SeriesDataPoint[] = [
+    ['z', 0],
+    ['a', null],
+    ['m', 1],
+  ];
+  expect(rebaseSeriesData(withNull, 'a')).toEqual(withNull);
 });
