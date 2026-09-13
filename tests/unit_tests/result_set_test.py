@@ -26,6 +26,7 @@ from pytest_mock import MockerFixture
 
 from superset.db_engine_specs.base import BaseEngineSpec
 from superset.result_set import (
+    dedup,
     stringify_extension_columns,
     stringify_values,
     SupersetResultSet,
@@ -269,6 +270,56 @@ def test_empty_column_names_do_not_rename_explicit_synthetic_names() -> None:
     df = result_set.to_pandas_df()
     assert list(df.columns) == ["_col_1", "_col_0"]
     assert df.iloc[0].tolist() == [10, 20]
+
+
+def test_dedup_generated_names_do_not_collide_with_explicit_names() -> None:
+    """
+    A generated ``<name>__N`` suffix must not collide with a name that is
+    explicitly present in the input, regardless of ordering or case handling.
+    Already-unique lists and plain duplicates keep their existing behavior.
+    """
+    assert dedup(["amount", "amount", "amount__1"]) == [
+        "amount",
+        "amount__2",
+        "amount__1",
+    ]
+    assert dedup(["amount__1", "amount", "amount"]) == [
+        "amount__1",
+        "amount",
+        "amount__2",
+    ]
+    assert dedup(["Amount", "amount", "AMOUNT__1"], case_sensitive=False) == [
+        "Amount",
+        "amount__2",
+        "AMOUNT__1",
+    ]
+    assert dedup(["a", "a", "a_1", "a"], suffix="_") == ["a", "a_2", "a_1", "a_3"]
+    assert dedup(["foo", "bar"]) == ["foo", "bar"]
+    assert dedup(["foo", "bar", "bar", "bar", "Bar"]) == [
+        "foo",
+        "bar",
+        "bar__1",
+        "bar__2",
+        "Bar",
+    ]
+
+
+def test_result_set_with_duplicate_and_suffixed_column_names() -> None:
+    """
+    ``SELECT 10 AS amount, 20 AS amount, 30 AS amount__1`` must not raise
+    ``ValueError: field 'amount__1' occurs more than once``; values and order
+    must be preserved and the explicit ``amount__1`` column kept as-is.
+    """
+    data = [(10, 20, 30)]
+    description = [
+        ("amount", None, None, None, None, None, None),
+        ("amount", None, None, None, None, None, None),
+        ("amount__1", None, None, None, None, None, None),
+    ]
+    result_set = SupersetResultSet(data, description, BaseEngineSpec)  # type: ignore
+
+    assert result_set.table.column_names == ["amount", "amount__2", "amount__1"]
+    assert result_set.to_pandas_df().values.tolist() == [[10, 20, 30]]
 
 
 def test_json_data_type_preserved_as_objects() -> None:

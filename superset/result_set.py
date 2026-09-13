@@ -46,15 +46,30 @@ def dedup(l: list[str], suffix: str = "__", case_sensitive: bool = True) -> list
     )
     foo,bar,bar__1,bar__2,Bar__3
     """
+
+    def fix_case(s: str) -> str:
+        return s if case_sensitive else s.lower()
+
     new_l: list[str] = []
-    seen: dict[str, int] = {}
+    counters: dict[str, int] = {}
+    # Generated names must not collide with any name in the input (explicit
+    # aliases such as ``foo__1``) nor with names generated earlier.
+    taken: set[str] = {fix_case(item) for item in l}
+    seen: set[str] = set()
     for item in l:
-        s_fixed_case = item if case_sensitive else item.lower()
+        s_fixed_case = fix_case(item)
         if s_fixed_case in seen:
-            seen[s_fixed_case] += 1
-            item += suffix + str(seen[s_fixed_case])
+            counter = counters.get(s_fixed_case, 0)
+            while True:
+                counter += 1
+                candidate = item + suffix + str(counter)
+                if fix_case(candidate) not in taken:
+                    break
+            counters[s_fixed_case] = counter
+            item = candidate
+            taken.add(fix_case(item))
         else:
-            seen[s_fixed_case] = 0
+            seen.add(s_fixed_case)
         new_l.append(item)
     return new_l
 
