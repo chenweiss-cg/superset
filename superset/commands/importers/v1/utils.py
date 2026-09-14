@@ -195,6 +195,7 @@ def load_configs(
         prefix = file_name.split("/")[0]
         schema = schemas.get(f"{prefix}/")
         if schema:
+            config: Any = None
             try:
                 config = load_yaml(file_name, content)
                 if not isinstance(config, dict):

@@ -18,6 +18,7 @@
 
 import gzip
 import io
+from typing import Any
 from unittest.mock import patch
 
 import pandas as pd
@@ -329,6 +330,64 @@ class TestLoadConfigsNonMappingYaml:
         assert configs == {}
         assert len(exceptions) == 1
         assert "databases/malformed.yaml" in exceptions[0].messages
+
+
+class TestLoadConfigsMalformedYaml:
+    """Unparseable YAML must be collected as a file-specific validation
+    error regardless of its position in the bundle; the error handler must
+    not depend on a ``config`` from a previously loaded file."""
+
+    @staticmethod
+    def _load(
+        contents: dict[str, str],
+    ) -> tuple[dict[str, Any], list[ValidationError]]:
+        from superset.commands.importers.v1.utils import load_configs
+        from superset.databases.schemas import ImportV1DatabaseSchema
+
+        exceptions: list[ValidationError] = []
+        configs = load_configs(
+            contents,
+            {"databases/": ImportV1DatabaseSchema()},
+            {},
+            exceptions,
+            {},
+            {},
+            {},
+            {},
+        )
+        return configs, exceptions
+
+    def test_malformed_first_file_is_reported_as_validation_error(
+        self, session: Session
+    ) -> None:
+        from superset.models.core import Database
+
+        Database.metadata.create_all(session.get_bind())  # pylint: disable=no-member
+
+        configs, exceptions = self._load({"databases/bad.yaml": "name: ["})
+
+        assert configs == {}
+        assert [exc.messages for exc in exceptions] == [
+            {"databases/bad.yaml": {"databases/bad.yaml": "Not a valid YAML file"}}
+        ]
+
+    def test_multiple_malformed_files_each_reported(self, session: Session) -> None:
+        from superset.models.core import Database
+
+        Database.metadata.create_all(session.get_bind())  # pylint: disable=no-member
+
+        configs, exceptions = self._load(
+            {
+                "databases/bad.yaml": "name: [",
+                "databases/other.yaml": 'name: "unterminated',
+            }
+        )
+
+        assert configs == {}
+        assert [exc.messages for exc in exceptions] == [
+            {"databases/bad.yaml": {"databases/bad.yaml": "Not a valid YAML file"}},
+            {"databases/other.yaml": {"databases/other.yaml": "Not a valid YAML file"}},
+        ]
 
 
 class TestDatabaseConnectionIdentityUnchanged:
