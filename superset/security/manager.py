@@ -4739,6 +4739,14 @@ class SupersetSecurityManager(  # pylint: disable=too-many-public-methods
                     self.get_table_access_error_object(denied)
                 )
 
+            # A SQL Lab Query handed in as ``datasource`` too (so the
+            # ``EXTRA_RAISE_FOR_ACCESS_BYPASS`` hook still sees it) has
+            # just been authorised table by table above; its ``perm`` is a
+            # synthetic string no role holds, so the generic datasource
+            # check below would deny the very query that was just allowed.
+            if datasource is query:
+                datasource = None
+
         # Guest users MUST not modify the payload so it's requesting a
         # different chart or different ad-hoc metrics from what's saved.
         if (
