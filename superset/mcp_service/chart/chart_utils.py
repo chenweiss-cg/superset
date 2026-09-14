@@ -693,7 +693,14 @@ def merge_chart_form_data(  # noqa: C901
         fields_set = config.model_fields_set
         if "filters" not in fields_set:
             preserve_previous_adhoc_filters(new_form_data, existing_form_data)
-        merged = {**existing_form_data, **new_form_data}
+        patch = dict(new_form_data)
+        if isinstance(config, PieChartConfig):
+            # The pie mapper always emits creation defaults for these
+            # controls; only treat them as changes when the caller set them.
+            for field in ("color_scheme", "row_limit"):
+                if field not in fields_set:
+                    patch.pop(field, None)
+        merged = {**existing_form_data, **patch}
         # An explicitly empty collection clears the control rather than
         # falling through to the inherited value.
         for config_field, form_data_field in (
