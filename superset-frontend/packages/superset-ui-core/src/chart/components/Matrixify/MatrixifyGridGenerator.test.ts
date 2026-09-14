@@ -539,3 +539,87 @@ test('should preserve slice_id and dashboardId for embedded dashboard permission
   // dashboardId must be preserved for embedded dashboard context
   expect(cell!.formData.dashboardId).toBe(123);
 });
+
+const regionRowsFormData: TestFormData = {
+  viz_type: 'mixed_timeseries',
+  datasource: '1__table',
+  matrixify_enable: true,
+  matrixify_mode_rows: 'dimensions',
+  matrixify_dimension_rows: {
+    dimension: 'region',
+    values: ['East', 'West'],
+  },
+};
+
+const activeFilter = {
+  expressionType: 'SIMPLE',
+  subject: 'active',
+  operator: '==',
+  comparator: true,
+  clause: 'WHERE',
+};
+
+const sqlFilterB = {
+  expressionType: 'SQL',
+  sqlExpression: 'amount > 10',
+  clause: 'WHERE',
+};
+
+test('should apply cell dimension filters to adhoc_filters_b when present', () => {
+  const formData: TestFormData = {
+    ...regionRowsFormData,
+    adhoc_filters: [],
+    adhoc_filters_b: [activeFilter, sqlFilterB],
+  };
+  const originalFiltersB = [...formData.adhoc_filters_b];
+
+  const grid = generateMatrixifyGrid(formData);
+  expect(grid).not.toBeNull();
+
+  const east = grid!.cells[0][0]!.formData;
+  const west = grid!.cells[1][0]!.formData;
+
+  expect(east.adhoc_filters).toEqual([
+    expect.objectContaining({ subject: 'region', comparator: 'East' }),
+  ]);
+  expect(east.adhoc_filters_b).toEqual([
+    activeFilter,
+    sqlFilterB,
+    expect.objectContaining({ subject: 'region', comparator: 'East' }),
+  ]);
+  expect(west.adhoc_filters_b).toEqual([
+    activeFilter,
+    sqlFilterB,
+    expect.objectContaining({ subject: 'region', comparator: 'West' }),
+  ]);
+
+  // base form data and sibling cells are not mutated
+  expect(formData.adhoc_filters_b).toEqual(originalFiltersB);
+  expect(formData.adhoc_filters).toEqual([]);
+  expect(east.adhoc_filters_b).toHaveLength(3);
+});
+
+test('should apply cell dimension filters to an empty adhoc_filters_b', () => {
+  const grid = generateMatrixifyGrid({
+    ...regionRowsFormData,
+    adhoc_filters_b: [],
+  });
+
+  expect(grid!.cells[0][0]!.formData.adhoc_filters_b).toEqual([
+    expect.objectContaining({ subject: 'region', comparator: 'East' }),
+  ]);
+});
+
+test('should not create adhoc_filters_b when it is absent', () => {
+  const grid = generateMatrixifyGrid({
+    ...regionRowsFormData,
+    adhoc_filters: [activeFilter],
+  });
+
+  const cell = grid!.cells[0][0]!.formData;
+  expect('adhoc_filters_b' in cell).toBe(false);
+  expect(cell.adhoc_filters).toEqual([
+    activeFilter,
+    expect.objectContaining({ subject: 'region', comparator: 'East' }),
+  ]);
+});

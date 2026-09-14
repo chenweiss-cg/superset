@@ -169,12 +169,20 @@ function generateCellFormData(
     }
   }
 
-  // Add filters to existing adhoc_filters
+  // Add filters to existing adhoc_filters. Charts with a secondary query
+  // (e.g. Mixed Chart) keep a separate adhoc_filters_b collection that
+  // replaces adhoc_filters for that query, so it must receive the filters too.
   if (additionalFilters.length > 0) {
     cellFormData.adhoc_filters = [
       ...(cellFormData.adhoc_filters || []),
       ...additionalFilters,
     ];
+    if ('adhoc_filters_b' in cellFormData) {
+      cellFormData.adhoc_filters_b = [
+        ...(cellFormData.adhoc_filters_b || []),
+        ...additionalFilters,
+      ];
+    }
   }
 
   // Set metrics based on row/column configuration
