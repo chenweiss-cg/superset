@@ -162,3 +162,65 @@ def test_delete_tag_by_pk_delete_failed_surfaces_as_422(
     response = client.delete("/api/v1/tag/1")
 
     assert response.status_code == 422
+
+
+def test_get_objects_unknown_type_by_tag_ids_returns_422(
+    client: Any,
+    full_api_access: None,
+    mocker: MockerFixture,
+) -> None:
+    """
+    ``GET /api/v1/tag/get_objects/`` used to index ``ObjectType[value]`` in the
+    DAO without validation, so an unknown ``types`` entry raised ``KeyError``
+    and surfaced as a 500. It must be rejected as a 422 validation error.
+    """
+    query = mocker.patch("superset.daos.tag.db").session.query
+
+    response = client.get("/api/v1/tag/get_objects/?tagIds=1&types=not-a-type")
+
+    assert response.status_code == 422
+    assert response.json["message"] == {"types": ["invalid object type not-a-type"]}
+    query.assert_not_called()
+
+
+def test_get_objects_mixed_valid_and_unknown_types_returns_422(
+    client: Any,
+    full_api_access: None,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch("superset.daos.tag.db")
+
+    response = client.get("/api/v1/tag/get_objects/?tagIds=1&types=chart,bogus")
+
+    assert response.status_code == 422
+    assert response.json["message"] == {"types": ["invalid object type bogus"]}
+
+
+def test_get_objects_unknown_type_by_tag_names_returns_422(
+    client: Any,
+    full_api_access: None,
+    mocker: MockerFixture,
+) -> None:
+    """Name-based lookup must reject invalid types even when no tags resolve."""
+    mocker.patch("superset.daos.tag.TagDAO.find_by_names", return_value=[])
+
+    response = client.get("/api/v1/tag/get_objects/?tags=missing&types=not-a-type")
+
+    assert response.status_code == 422
+    assert response.json["message"] == {"types": ["invalid object type not-a-type"]}
+
+
+def test_get_objects_valid_types_still_succeed(
+    client: Any,
+    full_api_access: None,
+    mocker: MockerFixture,
+) -> None:
+    db = mocker.patch("superset.daos.tag.db")
+    db.session.query.return_value.filter.return_value.filter.return_value.all.return_value = []  # noqa: E501
+
+    response = client.get(
+        "/api/v1/tag/get_objects/?tagIds=1&types=chart,dashboard,query"
+    )
+
+    assert response.status_code == 200
+    assert response.json == {"result": []}

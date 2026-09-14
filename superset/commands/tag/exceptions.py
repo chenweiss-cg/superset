@@ -69,6 +69,16 @@ class TagAccessValidationError(ValidationError):
         super().__init__(message, field_name="tags")
 
 
+class TagObjectTypeValidationError(ValidationError):
+    """An object type filter does not name a known ``ObjectType``. A
+    ``ValidationError`` so it composites into ``TagInvalidError`` and supports
+    ``CommandInvalidError.normalized_messages()``.
+    """
+
+    def __init__(self, object_type: str) -> None:
+        super().__init__(f"invalid object type {object_type}", field_name="types")
+
+
 class TaggedObjectDeleteFailedError(DeleteFailedError):
     message = _("Tagged Object could not be deleted.")
 
