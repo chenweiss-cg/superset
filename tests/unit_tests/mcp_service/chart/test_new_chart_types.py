@@ -35,6 +35,7 @@ from superset.mcp_service.chart.chart_utils import (
     map_pie_config,
     map_pivot_table_config,
     map_table_config,
+    merge_chart_form_data,
 )
 from superset.mcp_service.chart.schemas import (
     AxisConfig,
@@ -228,6 +229,47 @@ class TestMapPieConfig:
         result = map_pie_config(config)
 
         assert result["color_scheme"] == "googleCategory10c"
+
+    @pytest.mark.parametrize(
+        "overrides,expected_color_scheme,expected_row_limit",
+        [
+            ({}, "lyftColors", 25),
+            (
+                {"color_scheme": "supersetColors", "row_limit": 100},
+                "supersetColors",
+                100,
+            ),
+            ({"color_scheme": "d3Category10", "row_limit": 42}, "d3Category10", 42),
+            ({"color_scheme": None}, "supersetColors", 25),
+        ],
+    )
+    def test_pie_update_merge_preserves_omitted_color_scheme_and_row_limit(
+        self,
+        overrides: dict[str, str | int | None],
+        expected_color_scheme: str,
+        expected_row_limit: int,
+    ) -> None:
+        """Only explicitly supplied controls replace saved values on update."""
+        existing = {
+            "viz_type": "pie",
+            "datasource": "1__table",
+            "groupby": ["product"],
+            "metric": "count",
+            "color_scheme": "lyftColors",
+            "row_limit": 25,
+        }
+        config = PieChartConfig(
+            chart_type="pie",
+            dimension=ColumnRef(name="product"),
+            metric=ColumnRef(name="revenue", aggregate="SUM"),
+            **overrides,
+        )
+
+        merged = merge_chart_form_data(existing, map_pie_config(config), config)
+
+        assert merged["metric"]["column"]["column_name"] == "revenue"
+        assert merged["color_scheme"] == expected_color_scheme
+        assert merged["row_limit"] == expected_row_limit
 
     def test_pie_form_data_custom_options(self) -> None:
         config = PieChartConfig(
