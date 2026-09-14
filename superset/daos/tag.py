@@ -18,9 +18,14 @@ import logging
 from typing import Any, Optional
 
 from flask import g
+from marshmallow import ValidationError
 from sqlalchemy.exc import NoResultFound
 
-from superset.commands.tag.exceptions import TagNotFoundError
+from superset.commands.tag.exceptions import (
+    TagInvalidError,
+    TagNotFoundError,
+    TagObjectTypeValidationError,
+)
 from superset.commands.tag.utils import to_object_model, to_object_type
 from superset.daos.base import BaseDAO
 from superset.daos.chart import ChartDAO
@@ -42,6 +47,20 @@ logger = logging.getLogger(__name__)
 
 
 class TagDAO(BaseDAO[Tag]):
+    @staticmethod
+    def validate_object_types(obj_types: Optional[list[str]]) -> None:
+        """
+        Raise ``TagInvalidError`` if any entry in ``obj_types`` is not a known
+        ``ObjectType`` name.
+        """
+        exceptions: list[ValidationError] = [
+            TagObjectTypeValidationError(obj_type)
+            for obj_type in obj_types or []
+            if obj_type not in ObjectType.__members__
+        ]
+        if exceptions:
+            raise TagInvalidError(exceptions=exceptions)
+
     @staticmethod
     def create_custom_tagged_objects(
         object_type: ObjectType, object_id: int, tag_names: list[str]
@@ -161,6 +180,7 @@ class TagDAO(BaseDAO[Tag]):
     def get_tagged_objects_by_tag_ids(
         tag_ids: Optional[list[int]], obj_types: Optional[list[str]] = None
     ) -> list[dict[str, Any]]:
+        TagDAO.validate_object_types(obj_types)
         results: list[dict[str, Any]] = []
 
         query = db.session.query(TaggedObject).filter(TaggedObject.tag_id.in_(tag_ids))
@@ -251,6 +271,7 @@ class TagDAO(BaseDAO[Tag]):
         returns a list of tagged objects filtered by tag names and object types
         if no filters applied returns all tagged objects
         """
+        TagDAO.validate_object_types(obj_types)
         tags = TagDAO.find_by_names(tag_names) if tag_names else TagDAO.find_all()
         if not tags:
             return []
