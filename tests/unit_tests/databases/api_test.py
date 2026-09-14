@@ -122,6 +122,44 @@ def test_post_with_uuid(
     assert database.uuid == UUID("7c1b7880-a59d-47cd-8bf1-f1eb8d2863cb")
 
 
+@pytest.mark.parametrize("value", [None, 42, []])
+def test_post_put_reject_non_dict_metadata_params(
+    session: Session,
+    client: Any,
+    full_api_access: None,
+    mocker: MockerFixture,
+    value: Any,
+) -> None:
+    """
+    Test that a non-mapping ``extra.metadata_params`` is rejected as a client
+    validation error before the create/update commands run.
+    """
+    from superset.models.core import Database
+
+    Database.metadata.create_all(session.get_bind())  # pylint: disable=no-member
+    database = Database(database_name="my_db", sqlalchemy_uri="sqlite://")
+    session.add(database)
+    session.commit()
+
+    create_command = mocker.patch("superset.databases.api.CreateDatabaseCommand")
+    update_command = mocker.patch("superset.databases.api.UpdateDatabaseCommand")
+    extra = json.dumps({"metadata_params": value})
+
+    response = client.post(
+        "/api/v1/database/",
+        json={"database_name": "probe", "extra": extra},
+    )
+    assert response.status_code == 422
+    assert "metadata_params" in response.json["message"]["extra"][0]
+
+    response = client.put(f"/api/v1/database/{database.id}", json={"extra": extra})
+    assert response.status_code == 400
+    assert "metadata_params" in response.json["message"]["extra"][0]
+
+    create_command.assert_not_called()
+    update_command.assert_not_called()
+
+
 def test_password_mask(
     mocker: MockerFixture,
     app: Any,

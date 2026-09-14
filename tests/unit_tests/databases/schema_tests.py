@@ -577,6 +577,39 @@ def test_extra_validator_interpolates_invalid_metadata_params_key() -> None:
     assert "%(" not in message
 
 
+@pytest.mark.parametrize("value", [None, 42, True, "schema", [], ["schema"]])
+def test_extra_validator_rejects_non_dict_metadata_params(value: Any) -> None:
+    """
+    Test that extra_validator rejects a present but non-dict metadata_params
+    with a ValidationError instead of raising TypeError (null, numbers) or
+    silently accepting lists, matching the import schema's fields.Dict.
+    """
+    from superset.databases.schemas import DatabasePostSchema, DatabasePutSchema
+
+    payload = {"extra": json.dumps({"metadata_params": value})}
+    with pytest.raises(ValidationError) as exc_info:
+        DatabasePutSchema().load(payload)
+    assert exc_info.value.messages_dict.keys() == {"extra"}
+    assert "metadata_params in Extra field must be a mapping" in str(exc_info.value)
+
+    with pytest.raises(ValidationError) as exc_info:
+        DatabasePostSchema().load({"database_name": "test_db", **payload})
+    assert "metadata_params in Extra field must be a mapping" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("value", [{}, {"schema": "main"}])
+def test_extra_validator_accepts_dict_metadata_params(value: dict[str, Any]) -> None:
+    """
+    Test that extra_validator accepts an empty mapping and allowed MetaData
+    keyword arguments for metadata_params.
+    """
+    from superset.databases.schemas import DatabasePutSchema
+
+    payload = {"extra": json.dumps({"metadata_params": value})}
+    result = DatabasePutSchema().load(payload)
+    assert json.loads(result["extra"])["metadata_params"] == value
+
+
 def test_extra_validator_interpolates_json_decode_error() -> None:
     """
     As above, for the message raised when ``extra`` is not decodable JSON.
